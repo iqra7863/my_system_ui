@@ -1,9 +1,9 @@
 from flask import Flask, render_template, request, redirect, url_for, session, Response
 import os
 import csv
+from datetime import datetime
 from helpers.camera_manager import load_cameras, get_next_camera_id
-from helpers.detection_api_stub import generate_frames  # ✅ Use the stub version (no cv2)
-from helpers.logger import get_logs, get_daily_report
+from helpers.logger import get_logs, get_daily_report, log_mobile_usage
 from helpers.pause_manager import set_pause, is_paused
 
 app = Flask(__name__)
@@ -16,7 +16,8 @@ users = {
 }
 
 CAMERA_FILE = 'camera_data.csv'
-camera_sources = {}
+SCREENSHOT_FOLDER = 'static/screenshots'
+os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
 @app.route('/', methods=['GET', 'POST'])
 def login():
@@ -35,7 +36,7 @@ def login():
 def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
-    camera_sources.update(load_cameras(CAMERA_FILE))
+    camera_sources = load_cameras(CAMERA_FILE)
     return render_template('dashboard.html', cameras=camera_sources, user=session['user'], role=session['role'])
 
 @app.route('/logout')
@@ -61,17 +62,6 @@ def add_cameras():
 
     return render_template('add_cameras.html')
 
-@app.route('/video_feed/<int:cam_id>')
-def video_feed(cam_id):
-    cams = load_cameras(CAMERA_FILE)
-    if cam_id in cams:
-        cam_url = cams[cam_id]['url']
-        cam_name = cams[cam_id]['name']
-        print(f"[STREAM] Streaming from {cam_url} ({cam_name})")
-        return Response(generate_frames(cam_url, cam_name),
-                        mimetype='multipart/x-mixed-replace; boundary=frame')
-    return "Camera not found."
-
 @app.route('/pause')
 def pause():
     set_pause(True)
@@ -92,8 +82,30 @@ def report():
 
 @app.route('/gallery')
 def gallery():
-    images = os.listdir('static/screenshots')
+    images = os.listdir(SCREENSHOT_FOLDER)
+    images.sort(reverse=True)
     return render_template('gallery.html', images=images)
+
+# ✅ FINAL UPLOAD ROUTE — Handles screenshots from local PC
+@app.route('/upload', methods=['POST'])
+def upload():
+    try:
+        camera_name = request.form.get('camera_name', 'unknown')
+        image = request.files.get('screenshot')
+
+        if not camera_name or not image:
+            return "Invalid request", 400
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{camera_name}_{timestamp}.jpg"
+        filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+        image.save(filepath)
+
+        log_mobile_usage(camera_name)
+        print(f"[UPLOAD] Screenshot received and saved: {filename}")
+        return "OK", 200
+    except Exception as e:
+        return f"Upload error: {e}", 500
 
 if __name__ == '__main__':
     app.run(debug=True)
