@@ -2,7 +2,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, R
 import os
 import csv
 from helpers.camera_manager import load_cameras, get_next_camera_id
-from helpers.detection import generate_frames
+from helpers.detection_api_stub import generate_frames  # ✅ Use the stub version (no cv2)
 from helpers.logger import get_logs, get_daily_report
 from helpers.pause_manager import set_pause, is_paused
 
@@ -18,7 +18,6 @@ users = {
 CAMERA_FILE = 'camera_data.csv'
 camera_sources = {}
 
-
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
@@ -32,7 +31,6 @@ def login():
         return "Invalid Credentials"
     return render_template('login.html')
 
-
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session:
@@ -40,12 +38,10 @@ def dashboard():
     camera_sources.update(load_cameras(CAMERA_FILE))
     return render_template('dashboard.html', cameras=camera_sources, user=session['user'], role=session['role'])
 
-
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
-
 
 @app.route('/add_cameras', methods=['GET', 'POST'])
 def add_cameras():
@@ -65,8 +61,6 @@ def add_cameras():
 
     return render_template('add_cameras.html')
 
-
-
 @app.route('/video_feed/<int:cam_id>')
 def video_feed(cam_id):
     cams = load_cameras(CAMERA_FILE)
@@ -83,28 +77,23 @@ def pause():
     set_pause(True)
     return redirect(url_for('dashboard'))
 
-
 @app.route('/resume')
 def resume():
     set_pause(False)
     return redirect(url_for('dashboard'))
 
-
 @app.route('/logs')
 def logs():
     return render_template('logs.html', logs=get_logs())
-
 
 @app.route('/report')
 def report():
     return render_template('report.html', report=get_daily_report())
 
-
 @app.route('/gallery')
 def gallery():
     images = os.listdir('static/screenshots')
     return render_template('gallery.html', images=images)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
