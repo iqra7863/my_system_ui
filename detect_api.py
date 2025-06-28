@@ -4,14 +4,14 @@ import requests
 from datetime import datetime
 from ultralytics import YOLO
 
-# 💡 Replace this with your actual dashboard URL
-UPLOAD_URL = "https://your-render-app-name.onrender.com/upload"
+# ✅ Your LIVE Render upload URL
+UPLOAD_URL = "https://my-system-ui.onrender.com/upload"
 
-# Camera source (0 = built-in webcam, or use IP stream URL)
-CAMERA_SOURCE = 0
-CAMERA_NAME = "Lab_PC_1"
+# Camera config
+CAMERA_SOURCE = "http://100.86.234.134:8080/video"
+CAMERA_NAME = "iqra patel"
 
-# Load model (you can also use a path to your custom model)
+# Load model (must be in same folder)
 model = YOLO("yolov8s.pt")
 
 def detect_and_upload():
@@ -36,17 +36,14 @@ def detect_and_upload():
                 if cls == 'cell phone':
                     print("[ALERT] Mobile phone detected!")
                     send_screenshot(frame)
-                    break  # avoid sending multiple times per frame
+                    break  # Only one detection per frame
 
-        # Show frame locally (optional)
         cv2.imshow("Live Detection", frame)
         if cv2.waitKey(1) & 0xFF == ord('q'):
             break
 
     cap.release()
     cv2.destroyAllWindows()
-
-
 def send_screenshot(frame):
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     filename = f"{CAMERA_NAME}_{timestamp}.jpg"
@@ -55,17 +52,19 @@ def send_screenshot(frame):
     os.makedirs("screenshots", exist_ok=True)
     cv2.imwrite(filepath, frame)
 
-    # Send via POST request
     try:
         with open(filepath, 'rb') as f:
-            response = requests.post(UPLOAD_URL, files={'screenshot': f}, data={'camera_name': CAMERA_NAME})
+            response = requests.post(
+                UPLOAD_URL,
+                files={'screenshot': f},
+                data={'camera_name': CAMERA_NAME}
+            )
         if response.status_code == 200:
             print(f"[UPLOAD] Screenshot sent successfully: {filename}")
         else:
             print(f"[ERROR] Upload failed: {response.status_code}")
     except Exception as e:
         print(f"[ERROR] Failed to send screenshot: {e}")
-
 
 if __name__ == "__main__":
     detect_and_upload()
