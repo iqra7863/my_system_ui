@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📸 Screenshot Gallery - Iqra Detecting System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h2>📸 Screenshot Gallery</h2>
+
+    {% if images %}
+        {% for img in images %}
+            <div style="margin: 10px; display: inline-block;">
+                <img src="/static/screenshots/{{ img }}" width="300"><br>
+                <p>{{ img }}</p>
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No screenshots available.</p>
+    {% endif %}
+
+    <br><br>
+    <a href="/dashboard">⬅ Back to Dashboard</a>
+
+    <!-- Theme Loader -->
+    <script>
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.className = savedTheme;
+        }
+    </script>
+</body>
+</html>

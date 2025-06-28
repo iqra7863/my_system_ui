@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Add New Camera - Iqra Detecting System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h2>➕ Add New Camera</h2>
+
+    <form method="POST">
+        <label>Camera Name:</label><br>
+        <input type="text" name="name" required><br><br>
+
+        <label>Stream URL:</label><br>
+        <input type="text" name="url" required><br><br>
+
+        <input type="submit" value="Add Camera">
+    </form>
+
+    <br><br>
+    <a href="{{ url_for('dashboard') }}">⬅ Back to Dashboard</a>
+
+    <!-- Theme support -->
+    <script>
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.className = savedTheme;
+        }
+    </script>
+</body>
+</html>

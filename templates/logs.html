@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📝 Detection Logs - Iqra Detecting System</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h2>📝 Mobile Detection Logs</h2>
+
+    {% if logs %}
+        <table border="1" cellpadding="8" cellspacing="0">
+            <tr>
+                <th>Timestamp</th>
+                <th>Camera</th>
+            </tr>
+            {% for row in logs %}
+            <tr>
+                <td>{{ row[0] }}</td>
+                <td>{{ row[1] }}</td>
+            </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No logs found.</p>
+    {% endif %}
+
+    <br><br>
+    <a href="/dashboard">⬅ Back to Dashboard</a>
+
+    <!-- Theme Loader -->
+    <script>
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.className = savedTheme;
+        }
+    </script>
+</body>
+</html>

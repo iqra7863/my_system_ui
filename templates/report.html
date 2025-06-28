@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>📊 Mobile Usage Report</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h2>📊 Daily Mobile Usage Heatmap</h2>
+
+    <canvas id="heatmapChart" width="800" height="400"></canvas>
+
+    <script>
+        const data = {{ report|tojson }};
+        const labels = data.map(item => item[0]);
+        const counts = data.map(item => item[1]);
+
+        const ctx = document.getElementById('heatmapChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Detections Per Day',
+                    data: counts,
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    </script>
+
+    <br><a href="/dashboard">⬅ Back to Dashboard</a>
+</body>
+</html>

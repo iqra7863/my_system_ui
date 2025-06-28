@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Iqra Detecting System - Dashboard</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <h2>📡 Welcome, {{ user }} ({{ role }})</h2>
+
+    <!-- Theme toggle button -->
+    <button onclick="toggleTheme()">🌓 Toggle Theme</button>
+
+    <!-- Camera List -->
+    <h3>📷 Camera Feeds</h3>
+    <ul>
+        {% for cam_id, cam in cameras.items() %}
+            <li>
+                <b>{{ cam['name'] }}</b> —
+                <a href="{{ url_for('video_feed', cam_id=cam_id) }}" target="_blank">Live Stream</a>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <!-- Add camera only for Admin -->
+    {% if role == 'admin' %}
+    <h3>➕ Add New Camera</h3>
+    <a href="{{ url_for('add_cameras') }}">Add Camera</a><br><br>
+    {% endif %}
+
+    <!-- Other links -->
+    <h3>📸 <a href="{{ url_for('gallery') }}">Screenshot Gallery</a></h3>
+    <h3>📝 <a href="{{ url_for('logs') }}">Detection Logs</a></h3>
+    <h3>📊 <a href="{{ url_for('report') }}">Daily Report (Heatmap)</a></h3>
+
+    <!-- Pause/Resume detection -->
+    <h3>⏸️ <a href="{{ url_for('pause') }}">Pause Detection</a></h3>
+    <h3>▶️ <a href="{{ url_for('resume') }}">Resume Detection</a></h3>
+
+    <!-- Logout -->
+    <br><br>
+    <a href="{{ url_for('logout') }}">🔓 Logout</a>
+
+    <!-- Theme switch JS -->
+    <script>
+        function toggleTheme() {
+            const current = localStorage.getItem('theme') || 'dark';
+            const newTheme = current === 'dark' ? 'light' : 'dark';
+            document.body.className = newTheme;
+            localStorage.setItem('theme', newTheme);
+        }
+
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.body.className = savedTheme;
+        }
+    </script>
+</body>
+</html>
