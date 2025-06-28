@@ -90,22 +90,25 @@ def gallery():
 @app.route('/upload', methods=['POST'])
 def upload():
     try:
-        camera_name = request.form.get('camera_name', 'unknown')
+        camera_name = request.form.get('camera_name')
         image = request.files.get('screenshot')
 
         if not camera_name or not image:
             return "Invalid request", 400
 
+        # Save screenshot
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{camera_name}_{timestamp}.jpg"
-        filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+        filepath = os.path.join('static/screenshots', filename)
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
         image.save(filepath)
 
+        # Log usage
         log_mobile_usage(camera_name)
-        print(f"[UPLOAD] Screenshot received and saved: {filename}")
+        print(f"[UPLOAD] Screenshot saved: {filename}")
         return "OK", 200
+
     except Exception as e:
         return f"Upload error: {e}", 500
-
 if __name__ == '__main__':
     app.run(debug=True)
