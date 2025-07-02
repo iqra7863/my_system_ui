@@ -1,35 +1,67 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Dashboard - Iqra Detecting System</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>Iqra Detecting System - Dashboard</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f4f4;
+            margin: 20px;
+        }
+        h1, h2 {
+            color: #333;
+        }
+        .camera-box {
+            border: 1px solid #aaa;
+            background: #fff;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+        }
+        .camera-box a {
+            display: inline-block;
+            margin-top: 5px;
+            color: #007BFF;
+        }
+        .top-links, .bottom-links {
+            margin: 15px 0;
+        }
+        .top-links a, .bottom-links a {
+            margin-right: 15px;
+            color: #007BFF;
+            text-decoration: none;
+        }
+    </style>
 </head>
 <body>
-    <h2>Welcome, {{ user }} ({{ role }})</h2>
+    <h1>Welcome, {{ user }} ({{ role }})</h1>
 
-    <h3>Connected Cameras</h3>
-    <ul>
-        {% for cam in cameras %}
-            <li>{{ cam['camera_name'] }} — 
-                <a href="{{ url_for('video_feed', cam_id=cam['camera_id']) }}" target="_blank">Live Stream</a>
-            </li>
-        {% else %}
-            <li>No cameras connected yet.</li>
-        {% endfor %}
-    </ul>
+    <h2>Connected Cameras</h2>
+    {% for cam in cameras %}
+        <div class="camera-box">
+            <strong>{{ cam['camera_name'] }}</strong><br>
+            Stream: <a href="{{ url_for('video_feed', cam_id=cam['camera_id']) }}" target="_blank">Live Stream</a>
+        </div>
+    {% else %}
+        <p>No cameras connected.</p>
+    {% endfor %}
 
     {% if role == 'admin' %}
-        <p><a href="{{ url_for('add_cameras') }}">Add New Camera</a></p>
+    <div class="top-links">
+        <a href="{{ url_for('add_cameras') }}">Add New Camera</a>
+    </div>
     {% endif %}
 
-    <p><a href="{{ url_for('gallery') }}">Gallery</a></p>
-    <p><a href="{{ url_for('logs') }}">Detection Logs</a></p>
-    <p><a href="{{ url_for('report') }}">Heatmap Report</a></p>
+    <div class="top-links">
+        <a href="{{ url_for('gallery') }}">Gallery</a>
+        <a href="{{ url_for('logs') }}">Detection Logs</a>
+        <a href="{{ url_for('report') }}">Heatmap Report</a>
+    </div>
 
-    <p>
+    <div class="bottom-links">
         <a href="{{ url_for('pause') }}">Pause Detection</a> |
         <a href="{{ url_for('resume') }}">Resume Detection</a> |
         <a href="{{ url_for('logout') }}">Logout</a>
-    </p>
+    </div>
 </body>
 </html>
