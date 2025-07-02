@@ -1,35 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <title>Dashboard</title>
+    <title>Dashboard - Iqra Detecting System</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <body>
-    <h1>Welcome, {{ user }} ({{ role }})</h1>
+    <h2>Welcome, {{ user }} ({{ role }})</h2>
 
-    <h2>Connected Cameras</h2>
+    <h3>Connected Cameras</h3>
     <ul>
         {% for cam in cameras %}
-            <li>
-                <strong>{{ cam['camera_name'] }}</strong> — {{ cam['camera_url'] }}
+            <li>{{ cam['camera_name'] }} — 
+                <a href="{{ url_for('video_feed', cam_id=cam['camera_id']) }}" target="_blank">Live Stream</a>
             </li>
         {% else %}
-            <li>No cameras added yet.</li>
+            <li>No cameras connected yet.</li>
         {% endfor %}
     </ul>
 
     {% if role == 'admin' %}
-    <a href="{{ url_for('add_cameras') }}">Add New Camera</a><br>
+        <p><a href="{{ url_for('add_cameras') }}">Add New Camera</a></p>
     {% endif %}
 
-    <a href="{{ url_for('gallery') }}">Gallery</a><br>
-    <a href="{{ url_for('logs') }}">Detection Logs</a><br>
-    <a href="{{ url_for('report') }}">Heatmap Report</a><br>
+    <p><a href="{{ url_for('gallery') }}">Gallery</a></p>
+    <p><a href="{{ url_for('logs') }}">Detection Logs</a></p>
+    <p><a href="{{ url_for('report') }}">Heatmap Report</a></p>
 
-    <br>
-    <a href="{{ url_for('pause') }}">Pause Detection</a> |
-    <a href="{{ url_for('resume') }}">Resume Detection</a> |
-    <a href="{{ url_for('logout') }}">Logout</a>
+    <p>
+        <a href="{{ url_for('pause') }}">Pause Detection</a> |
+        <a href="{{ url_for('resume') }}">Resume Detection</a> |
+        <a href="{{ url_for('logout') }}">Logout</a>
+    </p>
 </body>
 </html>
