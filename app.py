@@ -1,7 +1,6 @@
-from flask import Flask, render_template, request, redirect, url_for, session, Response
+from flask import Flask, render_template, request, redirect, url_for, session
 import os
 import csv
-import cv2
 from datetime import datetime
 from helpers.camera_manager import load_cameras, get_next_camera_id
 from helpers.logger import get_logs, get_daily_report, log_mobile_usage
@@ -96,14 +95,12 @@ def upload():
         if not camera_name or not image:
             return "Invalid request", 400
 
-        # Save screenshot
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         filename = f"{camera_name}_{timestamp}.jpg"
         filepath = os.path.join(SCREENSHOT_FOLDER, filename)
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
         image.save(filepath)
 
-        # Log usage
         log_mobile_usage(camera_name)
         print(f"[UPLOAD] Screenshot saved: {filename}")
         return "OK", 200
@@ -111,31 +108,7 @@ def upload():
     except Exception as e:
         return f"Upload error: {e}", 500
 
-# ✅ Video Feed Route for Each IP Camera
-def generate_stream(url):
-    cap = cv2.VideoCapture(url)
-    if not cap.isOpened():
-        yield b"--frame\r\nContent-Type: text/plain\r\n\r\n[ERROR] Could not open stream.\r\n\r\n"
-        return
-
-    while True:
-        success, frame = cap.read()
-        if not success:
-            break
-        _, buffer = cv2.imencode('.jpg', frame)
-        frame_bytes = buffer.tobytes()
-        yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-    cap.release()
-
-@app.route('/video_feed/<int:cam_id>')
-def video_feed(cam_id):
-    camera_sources = load_cameras(CAMERA_FILE)
-    for cam in camera_sources:
-        if int(cam['camera_id']) == cam_id:
-            return Response(generate_stream(cam['camera_url']),
-                            mimetype='multipart/x-mixed-replace; boundary=frame')
-    return "Camera not found", 404
+# 🚫 Removed /video_feed because Render cannot use cv2 video streaming.
 
 if __name__ == '__main__':
     app.run(debug=True)
