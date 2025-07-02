@@ -8,8 +8,8 @@ from ultralytics import YOLO
 UPLOAD_URL = "https://my-system-ui.onrender.com/upload"
 
 # Camera config
-CAMERA_SOURCE = "http://100.86.234.134:8080/video"
-CAMERA_NAME = "iqra patel"
+CAMERA_SOURCE = "http://100.72.24.166:8080/video"
+CAMERA_NAME = "classroom1"
 
 # Load model (must be in same folder)
 model = YOLO("yolov8s.pt")
