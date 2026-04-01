@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+monitoring_env/
+
+static/screenshots/
+static/logs/
+
+camera_data.csv
+*.pt

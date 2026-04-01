@@ -1,7 +1,10 @@
-from flask import Flask, render_template, request, redirect, url_for, session
+from ultralytics import YOLO
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, Response
 import os
 import csv
+import cv2
 from datetime import datetime
+
 from helpers.camera_manager import load_cameras, get_next_camera_id
 from helpers.logger import get_logs, get_daily_report, log_mobile_usage
 from helpers.pause_manager import set_pause, is_paused
@@ -9,6 +12,10 @@ from helpers.pause_manager import set_pause, is_paused
 app = Flask(__name__)
 app.secret_key = 'iqra-detect-key'
 
+# Load YOLO model
+model = YOLO("yolov8s.pt")
+
+# ---------------- USERS ---------------- #
 users = {
     'admin': {'password': 'admin123', 'role': 'admin'},
     'teacher': {'password': 'teacher123', 'role': 'teacher'},
@@ -17,33 +24,48 @@ users = {
 
 CAMERA_FILE = 'camera_data.csv'
 SCREENSHOT_FOLDER = 'static/screenshots'
+
 os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
+# ---------------- LOGIN ---------------- #
 @app.route('/', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
         uname = request.form['username']
         pwd = request.form['password']
+
         user = users.get(uname)
         if user and user['password'] == pwd:
             session['user'] = uname
             session['role'] = user['role']
             return redirect(url_for('dashboard'))
         return "Invalid Credentials"
+
     return render_template('login.html')
 
+# ---------------- DASHBOARD ---------------- #
 @app.route('/dashboard')
 def dashboard():
     if 'user' not in session:
         return redirect(url_for('login'))
-    camera_sources = load_cameras(CAMERA_FILE)
-    return render_template('dashboard.html', cameras=camera_sources, user=session['user'], role=session['role'])
 
+    cameras = load_cameras(CAMERA_FILE)
+
+    return render_template(
+        'dashboard.html',
+        cameras=cameras,
+        user=session['user'],
+        role=session['role'],
+        is_paused=is_paused()
+    )
+
+# ---------------- LOGOUT ---------------- #
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
 
+# ---------------- ADD CAMERA ---------------- #
 @app.route('/add_cameras', methods=['GET', 'POST'])
 def add_cameras():
     if 'user' not in session or session['role'] != 'admin':
@@ -52,16 +74,104 @@ def add_cameras():
     if request.method == 'POST':
         name = request.form['name']
         url = request.form['url']
+
         cam_id = get_next_camera_id(CAMERA_FILE)
+
         with open(CAMERA_FILE, 'a', newline='') as f:
             writer = csv.writer(f)
             if os.path.getsize(CAMERA_FILE) == 0:
                 writer.writerow(['camera_id', 'camera_name', 'camera_url'])
             writer.writerow([cam_id, name, url])
+
         return redirect(url_for('dashboard'))
 
     return render_template('add_cameras.html')
 
+# ---------------- REMOVE CAMERA ---------------- #
+@app.route('/remove_camera/<int:camera_id>')
+def remove_camera(camera_id):
+    cameras = load_cameras(CAMERA_FILE)
+
+    updated = [c for c in cameras if int(c['camera_id']) != camera_id]
+
+    with open(CAMERA_FILE, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['camera_id', 'camera_name', 'camera_url'])
+        for cam in updated:
+            writer.writerow([cam['camera_id'], cam['camera_name'], cam['camera_url']])
+
+    return redirect(url_for('dashboard'))
+
+# ---------------- VIDEO STREAM ---------------- #
+def generate_frames(camera_id):
+    cameras = load_cameras(CAMERA_FILE)
+
+    cam = None
+    for c in cameras:
+        if int(c['camera_id']) == camera_id:
+            cam = c
+            break
+
+    if not cam:
+        return
+
+    source = cam['camera_url']
+
+    if str(source).isdigit():
+        source = int(source)
+
+    cap = cv2.VideoCapture(source)
+
+    last_saved_time = 0  # prevent spam saving
+
+    while True:
+        success, frame = cap.read()
+        if not success:
+            break
+
+        # Skip detection if paused
+        if not is_paused():
+            results = model(frame)
+
+            for r in results:
+                for box in r.boxes:
+                    cls = int(box.cls[0])
+
+                    # 67 = mobile phone
+                    if cls == 67:
+                        x1, y1, x2, y2 = map(int, box.xyxy[0])
+
+                        # Draw box
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
+                        cv2.putText(frame, "Mobile Detected", (x1, y1 - 10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
+
+                        # Save screenshot every 5 seconds only
+                        current_time = datetime.now().timestamp()
+                        if current_time - last_saved_time > 5:
+                            timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                            filename = f"{cam['camera_name']}_{timestamp}.jpg"
+                            filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+
+                            cv2.imwrite(filepath, frame)
+                            log_mobile_usage(cam['camera_name'])
+
+                            last_saved_time = current_time
+
+        # Stream frame
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame = buffer.tobytes()
+
+        yield (b'--frame\r\n'
+               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+
+# ---------------- ROUTE FOR VIDEO ---------------- #
+@app.route('/video_feed/<int:camera_id>')
+def video_feed(camera_id):
+    return Response(generate_frames(camera_id),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+# ---------------- PAUSE / RESUME ---------------- #
 @app.route('/pause')
 def pause():
     set_pause(True)
@@ -72,43 +182,38 @@ def resume():
     set_pause(False)
     return redirect(url_for('dashboard'))
 
+# ---------------- LOGS ---------------- #
 @app.route('/logs')
 def logs():
     return render_template('logs.html', logs=get_logs())
 
+# ---------------- REPORT ---------------- #
 @app.route('/report')
 def report():
     return render_template('report.html', report=get_daily_report())
 
+# ---------------- GALLERY ---------------- #
 @app.route('/gallery')
 def gallery():
-    images = os.listdir(SCREENSHOT_FOLDER)
-    images.sort(reverse=True)
+    images = []
+    if os.path.exists(SCREENSHOT_FOLDER):
+        images = os.listdir(SCREENSHOT_FOLDER)
+        images.sort(reverse=True)
     return render_template('gallery.html', images=images)
 
-@app.route('/upload', methods=['POST'])
-def upload():
-    try:
-        camera_name = request.form.get('camera_name')
-        image = request.files.get('screenshot')
+# ---------------- API ---------------- #
+@app.route('/api/cameras')
+def api_cameras():
+    return jsonify(load_cameras(CAMERA_FILE))
 
-        if not camera_name or not image:
-            return "Invalid request", 400
+@app.route('/api/logs')
+def api_logs():
+    return jsonify(get_logs())
 
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        filename = f"{camera_name}_{timestamp}.jpg"
-        filepath = os.path.join(SCREENSHOT_FOLDER, filename)
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        image.save(filepath)
+@app.route('/api/report')
+def api_report():
+    return jsonify(get_daily_report())
 
-        log_mobile_usage(camera_name)
-        print(f"[UPLOAD] Screenshot saved: {filename}")
-        return "OK", 200
-
-    except Exception as e:
-        return f"Upload error: {e}", 500
-
-# 🚫 Removed /video_feed because Render cannot use cv2 video streaming.
-
+# ---------------- RUN ---------------- #
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True, host='0.0.0.0', port=5000)
