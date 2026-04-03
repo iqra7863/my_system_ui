@@ -19,9 +19,12 @@ model = YOLO("yolov8s.pt")
 # ---------------- CONFIG ---------------- #
 CAMERA_FILE = 'camera_data.csv'
 SCREENSHOT_FOLDER = 'static/screenshots'
-RENDER_UPLOAD_URL = "https://my_system_ui.onrender.com/api/upload"  # ⚠️ CHANGE THIS
+RENDER_UPLOAD_URL = "https://my_system_ui.onrender.com/api/upload"  # CHANGE if needed
 
 os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
+
+# ---------------- CAMERA CACHE ---------------- #
+camera_streams = {}
 
 # ---------------- USERS ---------------- #
 users = {
@@ -46,6 +49,7 @@ def login():
 
     return render_template('login.html')
 
+
 # ---------------- DASHBOARD ---------------- #
 @app.route('/dashboard')
 def dashboard():
@@ -62,11 +66,13 @@ def dashboard():
         is_paused=is_paused()
     )
 
+
 # ---------------- LOGOUT ---------------- #
 @app.route('/logout')
 def logout():
     session.clear()
     return redirect(url_for('login'))
+
 
 # ---------------- ADD CAMERA ---------------- #
 @app.route('/add_cameras', methods=['GET', 'POST'])
@@ -90,6 +96,7 @@ def add_cameras():
 
     return render_template('add_cameras.html')
 
+
 # ---------------- REMOVE CAMERA ---------------- #
 @app.route('/remove_camera/<int:camera_id>')
 def remove_camera(camera_id):
@@ -105,57 +112,83 @@ def remove_camera(camera_id):
 
     return redirect(url_for('dashboard'))
 
-# ---------------- VIDEO STREAM + YOLO ---------------- #
-def generate_frames(camera_id):
-    cameras = load_cameras(CAMERA_FILE)
 
-    # FIXED: safe camera lookup
+# ---------------- CAMERA INITIALIZER ---------------- #
+def get_camera(camera_id):
+    if camera_id in camera_streams:
+        return camera_streams[camera_id]
+
+    cameras = load_cameras(CAMERA_FILE)
     cam = next((c for c in cameras if int(c['camera_id']) == camera_id), None)
 
     if not cam:
-        print("Camera not found")
-        return
+        return None
 
     source = cam['camera_url']
 
-    if str(source).isdigit():
+    try:
         source = int(source)
+    except:
+        pass
+
+    print(f"[INFO] Opening camera: {source}")
 
     cap = cv2.VideoCapture(source)
+
+    if not cap.isOpened():
+        print(f"❌ Cannot open camera {source}")
+        return None
+
+    camera_streams[camera_id] = cap
+    return cap
+
+
+# ---------------- VIDEO STREAM ---------------- #
+def generate_frames(camera_id):
+    cameras = load_cameras(CAMERA_FILE)
+
+    cam = next((c for c in cameras if int(c['camera_id']) == camera_id), None)
+
+    if not cam:
+        print("❌ Camera not found")
+        return
+
+    cap = get_camera(camera_id)
+
+    if cap is None:
+        return
 
     last_saved_time = 0
 
     while True:
         success, frame = cap.read()
+
         if not success:
+            print(f"❌ Camera {camera_id} not reading")
             break
 
+        # YOLO DETECTION
         if not is_paused():
-
             results = model(frame)
 
             for r in results:
                 for box in r.boxes:
                     cls = int(box.cls[0])
 
-                    # 67 = mobile phone
                     if cls == 67:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                        # DRAW BOX
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                         cv2.putText(frame, "Mobile Detected", (x1, y1 - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
                         current_time = datetime.now().timestamp()
 
-                        # SAVE EVERY 5 SEC
                         if current_time - last_saved_time > 5:
                             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                             filename = f"{cam['camera_name']}_{timestamp}.jpg"
                             filepath = os.path.join(SCREENSHOT_FOLDER, filename)
 
-                            # SAVE LOCAL
                             cv2.imwrite(filepath, frame)
                             log_mobile_usage(cam['camera_name'])
 
@@ -164,13 +197,9 @@ def generate_frames(camera_id):
                                 with open(filepath, 'rb') as f:
                                     files = {'screenshot': f}
                                     data = {'camera_name': cam['camera_name']}
-
                                     requests.post(RENDER_UPLOAD_URL, files=files, data=data)
-
-                                print("[SYNC] Uploaded to Render")
-
-                            except Exception as e:
-                                print("[ERROR] Upload failed:", e)
+                            except:
+                                pass
 
                             last_saved_time = current_time
 
@@ -181,11 +210,13 @@ def generate_frames(camera_id):
         yield (b'--frame\r\n'
                b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
+
 # ---------------- VIDEO ROUTE ---------------- #
 @app.route('/video_feed/<int:camera_id>')
 def video_feed(camera_id):
     return Response(generate_frames(camera_id),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
 
 # ---------------- PAUSE / RESUME ---------------- #
 @app.route('/pause')
@@ -198,15 +229,18 @@ def resume():
     set_pause(False)
     return redirect(url_for('dashboard'))
 
+
 # ---------------- LOGS ---------------- #
 @app.route('/logs')
 def logs():
     return render_template('logs.html', logs=get_logs())
 
+
 # ---------------- REPORT ---------------- #
 @app.route('/report')
 def report():
     return render_template('report.html', report=get_daily_report())
+
 
 # ---------------- GALLERY ---------------- #
 @app.route('/gallery')
@@ -216,6 +250,7 @@ def gallery():
         images = os.listdir(SCREENSHOT_FOLDER)
         images.sort(reverse=True)
     return render_template('gallery.html', images=images)
+
 
 # ---------------- API ---------------- #
 @app.route('/api/cameras')
@@ -230,7 +265,8 @@ def api_logs():
 def api_report():
     return jsonify(get_daily_report())
 
-# ---------------- RENDER RECEIVE API ---------------- #
+
+# ---------------- RECEIVE FROM LOCAL ---------------- #
 @app.route('/api/upload', methods=['POST'])
 def api_upload():
     try:
@@ -254,6 +290,7 @@ def api_upload():
 
     except Exception as e:
         return str(e), 500
+
 
 # ---------------- RUN ---------------- #
 if __name__ == '__main__':

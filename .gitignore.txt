@@ -1,9 +1,19 @@
+
+# Python
 __pycache__/
 *.pyc
-monitoring_env/
 
+# Logs
+*.log
+*.csv
+
+# Screenshots
 static/screenshots/
-static/logs/
 
-camera_data.csv
-*.pt
+# Env
+monitoring_env/
+.env
+
+# OS files
+.DS_Store
+Thumbs.db
