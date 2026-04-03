@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, redirect, url_for, session, j
 import os
 import csv
 import cv2
+import requests
 from datetime import datetime
 
 from helpers.camera_manager import load_cameras, get_next_camera_id
@@ -12,8 +13,15 @@ from helpers.pause_manager import set_pause, is_paused
 app = Flask(__name__)
 app.secret_key = 'iqra-detect-key'
 
-# Load YOLO model
+# ---------------- YOLO MODEL ---------------- #
 model = YOLO("yolov8s.pt")
+
+# ---------------- CONFIG ---------------- #
+CAMERA_FILE = 'camera_data.csv'
+SCREENSHOT_FOLDER = 'static/screenshots'
+RENDER_UPLOAD_URL = "https://my_system_ui.onrender.com/api/upload"  # ⚠️ CHANGE THIS
+
+os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
 # ---------------- USERS ---------------- #
 users = {
@@ -21,11 +29,6 @@ users = {
     'teacher': {'password': 'teacher123', 'role': 'teacher'},
     'viewer': {'password': 'viewer123', 'role': 'viewer'}
 }
-
-CAMERA_FILE = 'camera_data.csv'
-SCREENSHOT_FOLDER = 'static/screenshots'
-
-os.makedirs(SCREENSHOT_FOLDER, exist_ok=True)
 
 # ---------------- LOGIN ---------------- #
 @app.route('/', methods=['GET', 'POST'])
@@ -102,17 +105,15 @@ def remove_camera(camera_id):
 
     return redirect(url_for('dashboard'))
 
-# ---------------- VIDEO STREAM ---------------- #
+# ---------------- VIDEO STREAM + YOLO ---------------- #
 def generate_frames(camera_id):
     cameras = load_cameras(CAMERA_FILE)
 
-    cam = None
-    for c in cameras:
-        if int(c['camera_id']) == camera_id:
-            cam = c
-            break
+    # FIXED: safe camera lookup
+    cam = next((c for c in cameras if int(c['camera_id']) == camera_id), None)
 
     if not cam:
+        print("Camera not found")
         return
 
     source = cam['camera_url']
@@ -122,15 +123,15 @@ def generate_frames(camera_id):
 
     cap = cv2.VideoCapture(source)
 
-    last_saved_time = 0  # prevent spam saving
+    last_saved_time = 0
 
     while True:
         success, frame = cap.read()
         if not success:
             break
 
-        # Skip detection if paused
         if not is_paused():
+
             results = model(frame)
 
             for r in results:
@@ -141,31 +142,46 @@ def generate_frames(camera_id):
                     if cls == 67:
                         x1, y1, x2, y2 = map(int, box.xyxy[0])
 
-                        # Draw box
+                        # DRAW BOX
                         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 255), 2)
                         cv2.putText(frame, "Mobile Detected", (x1, y1 - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2)
 
-                        # Save screenshot every 5 seconds only
                         current_time = datetime.now().timestamp()
+
+                        # SAVE EVERY 5 SEC
                         if current_time - last_saved_time > 5:
                             timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
                             filename = f"{cam['camera_name']}_{timestamp}.jpg"
                             filepath = os.path.join(SCREENSHOT_FOLDER, filename)
 
+                            # SAVE LOCAL
                             cv2.imwrite(filepath, frame)
                             log_mobile_usage(cam['camera_name'])
 
+                            # SEND TO RENDER
+                            try:
+                                with open(filepath, 'rb') as f:
+                                    files = {'screenshot': f}
+                                    data = {'camera_name': cam['camera_name']}
+
+                                    requests.post(RENDER_UPLOAD_URL, files=files, data=data)
+
+                                print("[SYNC] Uploaded to Render")
+
+                            except Exception as e:
+                                print("[ERROR] Upload failed:", e)
+
                             last_saved_time = current_time
 
-        # Stream frame
+        # STREAM FRAME
         ret, buffer = cv2.imencode('.jpg', frame)
-        frame = buffer.tobytes()
+        frame_bytes = buffer.tobytes()
 
         yield (b'--frame\r\n'
-               b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
+               b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
 
-# ---------------- ROUTE FOR VIDEO ---------------- #
+# ---------------- VIDEO ROUTE ---------------- #
 @app.route('/video_feed/<int:camera_id>')
 def video_feed(camera_id):
     return Response(generate_frames(camera_id),
@@ -213,6 +229,31 @@ def api_logs():
 @app.route('/api/report')
 def api_report():
     return jsonify(get_daily_report())
+
+# ---------------- RENDER RECEIVE API ---------------- #
+@app.route('/api/upload', methods=['POST'])
+def api_upload():
+    try:
+        camera_name = request.form.get('camera_name')
+        image = request.files.get('screenshot')
+
+        if not camera_name or not image:
+            return "Invalid request", 400
+
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        filename = f"{camera_name}_{timestamp}.jpg"
+
+        filepath = os.path.join(SCREENSHOT_FOLDER, filename)
+        image.save(filepath)
+
+        log_mobile_usage(camera_name)
+
+        print(f"[RENDER] Received: {filename}")
+
+        return "OK", 200
+
+    except Exception as e:
+        return str(e), 500
 
 # ---------------- RUN ---------------- #
 if __name__ == '__main__':
